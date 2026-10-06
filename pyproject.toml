@@ -1,16 +1,16 @@
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools-scm[toml]>=6.2"]
+requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "ml-sentinel"
 version = "1.0.0"
-description = "Proving drift detection fails: comprehensive analysis of ML monitoring"
+description = "Label-free monitoring of model accuracy under distribution shift: input drift vs confidence-based estimates (ATC)"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"
 authors = [
-    {name = "ML Sentinel Team", email = "sentinel@example.com"}
+    {name = "Krish Garg"}
 ]
 keywords = [
     "machine-learning",
@@ -52,17 +52,15 @@ dev = [
     "pre-commit>=2.15.0",
 ]
 experiments = [
-    "folktables>=0.0.11",
-    "wilds>=2.0.0",
-    "torch>=1.9.0",
-    "transformers>=4.10.0",
+    "folktables>=0.0.12",
+    "matplotlib>=3.5",
 ]
 
 [project.urls]
-Homepage = "https://github.com/YOUR_USERNAME/ml-sentinel"
-Documentation = "https://github.com/YOUR_USERNAME/ml-sentinel#readme"
-Repository = "https://github.com/YOUR_USERNAME/ml-sentinel.git"
-"Bug Tracker" = "https://github.com/YOUR_USERNAME/ml-sentinel/issues"
+Homepage = "https://github.com/krishdef7/ml-sentinel"
+Documentation = "https://github.com/krishdef7/ml-sentinel#readme"
+Repository = "https://github.com/krishdef7/ml-sentinel.git"
+"Bug Tracker" = "https://github.com/krishdef7/ml-sentinel/issues"
 
 [tool.black]
 line-length = 100

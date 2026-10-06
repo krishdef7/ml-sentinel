@@ -1,39 +1,21 @@
 """
-ML Sentinel: Why Drift Detection Fails
-=======================================
+ML Sentinel: label-free monitoring of model accuracy under distribution shift.
 
-A comprehensive empirical and theoretical analysis proving that data drift
-detection fundamentally cannot detect model degradation.
+Input-drift scores (KS, PSI, ...) measure how much P(X) moved. Confidence-based
+estimators (average confidence, ATC) estimate how much accuracy moved. The
+benchmark in experiments/folktables_benchmark.py compares the two on 147
+cross-state deployments of ACS (folktables) models.
 
-Key Finding: Drift detection achieves 0% TPR across 3 benchmarks and 1.6M samples.
-
-Example Usage
--------------
->>> from ml_sentinel import DriftDetector, SentinelMonitor
->>> 
->>> # Drift detection (will fail!)
->>> drift = DriftDetector(method='ks', threshold=0.15)
->>> drift_score = drift.score(X_train, X_test)
->>> 
->>> # Sentinel monitoring (works!)
->>> sentinel = SentinelMonitor()
->>> sentinel_score = sentinel.score(model, X_test)
-
-Citation
---------
-@inproceedings{sentinel2026,
-  title={Why Drift Detection Fails: An Empirical and Theoretical Analysis},
-  author={...},
-  booktitle={NeurIPS},
-  year={2026}
-}
+>>> from ml_sentinel import ks_drift, SentinelMonitor, atc_threshold, atc_accuracy
+>>> t = atc_threshold(model.predict_proba(X_val), y_val)
+>>> est_acc = atc_accuracy(model.predict_proba(X_prod), t)
 """
 
 __version__ = "1.0.0"
-__author__ = "ML Sentinel Team"
+__author__ = "Krish Garg"
 
 from .drift import DriftDetector, ks_drift, wasserstein_drift, psi_drift, mmd_drift
-from .sentinel import SentinelMonitor, compute_confidence_score
+from .sentinel import SentinelMonitor, atc_accuracy, atc_threshold, compute_confidence_score
 from .metrics import (
     compute_correlation,
     compute_roc_auc,
@@ -42,15 +24,17 @@ from .metrics import (
 )
 
 __all__ = [
-    # Drift Detection (fails!)
+    # Input drift
     "DriftDetector",
     "ks_drift",
-    "wasserstein_drift", 
+    "wasserstein_drift",
     "psi_drift",
     "mmd_drift",
-    # Sentinel Monitoring (works!)
+    # Label-free accuracy estimation
     "SentinelMonitor",
     "compute_confidence_score",
+    "atc_threshold",
+    "atc_accuracy",
     # Metrics
     "compute_correlation",
     "compute_roc_auc",

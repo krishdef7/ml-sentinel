@@ -1,4 +1,4 @@
-# Theoretical Framework: Impossibility of Drift-Based Degradation Detection
+# Notes: why input drift and accuracy degradation can separate
 
 ## 3.1 Formal Setup
 

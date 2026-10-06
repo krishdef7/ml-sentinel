@@ -98,3 +98,6 @@ results/*.json
 # Secrets
 .env
 .secrets
+
+# ACS PUMS download cache
+data/acs/

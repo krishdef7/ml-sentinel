@@ -1,371 +1,95 @@
-<div align="center">
+# ML Sentinel: is input drift a useful alarm for model degradation?
 
-# 🛡️ ML Sentinel
+[![CI](https://github.com/krishdef7/ml-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/krishdef7/ml-sentinel/actions/workflows/ci.yml)
 
-### **Why Drift Detection Fails: A Comprehensive Empirical and Theoretical Analysis**
+**Headline results.** I trained on California and deployed unchanged to the other 49 US states, for 3 ACS
+prediction tasks: 147 deployments and 5.27M test rows (2018 census data, via [folktables](https://github.com/socialfoundations/folktables)).
+- **Standard drift alarms fire almost everywhere.** KS > 0.1 alarmed on 102 of the 103 deployments whose
+  accuracy did *not* drop, and PSI > 0.25 on 92 of 103.
+- **Drift barely tracks the damage.** Within each task, the rank correlation between drift and the actual
+  accuracy drop is −0.14 to 0.05 for KS and 0.05 to 0.42 for PSI.
+- **A label-free confidence estimate does track it.** ATC (average thresholded confidence) flagged 35 of the 44
+  degraded deployments with **0 false alarms in 103**. It estimates the accuracy drop with a mean absolute error
+  of **1.3 points**, and its within-task rank correlation with the real drop is 0.55–0.89.
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](#reproducibility)
-[![Paper](https://img.shields.io/badge/paper-NeurIPS%202026-red.svg)](#citation)
+![Drift vs ATC](figures/drift_vs_atc.png)
 
-<img src="figures/hero_figure.png" width="800" alt="ML Sentinel Hero Figure">
+Every number above comes from [`experiments/folktables_benchmark.py`](experiments/folktables_benchmark.py).
+The per-deployment rows are in [`results/folktables_2018.csv`](results/folktables_2018.csv) and the summary in
+[`results/folktables_2018_summary.json`](results/folktables_2018_summary.json).
 
-**TL;DR:** We prove that data drift detection—the most widely-deployed approach to ML monitoring—*fundamentally cannot detect model degradation*, missing **100% of degradation cases** across 3 benchmarks and **1.6 million test samples**.
+## Setup
 
-[📄 Paper](#paper) · [🚀 Quick Start](#quick-start) · [📊 Results](#key-results) · [🔬 Reproduce](#reproducibility)
+| | |
+|---|---|
+| Data | ACS 2018 1-Year person records, all 50 states |
+| Tasks | `ACSIncome`, `ACSEmployment`, `ACSPublicCoverage` (folktables definitions) |
+| Model | `HistGradientBoostingClassifier`, trained on 70% of California. The other 30% is the in-distribution holdout |
+| Deployment | the same model, scored on each of the other 49 states (147 deployments) |
+| "Degraded" | accuracy more than 2 points below the CA holdout (44 of 147: 41 income, 1 employment, 2 public coverage) |
+| Signals (no labels) | max per-feature KS and PSI vs CA train; drop in mean confidence; ATC-estimated accuracy drop |
+| Thresholds | fixed before the run: KS 0.10, PSI 0.25, confidence and ATC drop 0.02 |
 
-</div>
+The state-code feature in the public-coverage task is excluded from drift scoring, because it would alarm
+on every deployment by construction.
 
----
+## Results
 
-## 🔥 Key Finding
+| Signal | Alarms on degraded (44) | Alarms on not degraded (103) | AUROC [95% CI] | Spearman vs drop (pooled) |
+|---|---|---|---|---|
+| KS drift > 0.10 | 44 | **102** | 0.86 [0.78, 0.93] | 0.52 |
+| PSI drift > 0.25 | 44 | **92** | 0.92 [0.86, 0.97] | 0.62 |
+| Mean-confidence drop > 0.02 | 20 | 0 | 0.98 [0.95, 1.00] | 0.93 |
+| **ATC-estimated drop > 0.02** | **35** | **0** | **0.98 [0.95, 1.00]** | **0.93** |
 
-> **Data drift detection achieves 0% True Positive Rate on model degradation.**
+**Read the pooled AUROC for drift with care.** Income is both the task that drifts most and the task that
+degrades most (left panel), so pooled drift AUROC partly measures *which task*, not *which deployment*. Within a
+task the picture is clearer:
 
-| Benchmark | Degraded Groups | Detected | TPR | Sentinel r | p-value |
-|-----------|-----------------|----------|-----|------------|---------|
-| **Folktables** (50 US states) | 27 | 0 | **0%** | 0.91 [0.85, 0.94] | <0.001 |
-| **CivilComments** (8 demographics) | 4 | 0 | **0%** | 0.90 [0.75, 1.00] | 0.002 |
-| **Amazon Reviews** (10 categories) | 5 | 0 | **0%** | 0.82 [0.31, 0.97] | <0.001 |
-| **TOTAL** | **35** | **0** | **0%** | — | — |
+| Spearman with actual accuracy drop | KS | PSI | Mean confidence | ATC |
+|---|---|---|---|---|
+| Income (41/49 degraded) | 0.03 | 0.42 | 0.90 | 0.89 |
+| Employment (1/49) | 0.05 | 0.16 | 0.67 | 0.81 |
+| Public coverage (2/49) | −0.14 | 0.05 | 0.55 | 0.55 |
 
-**Why?** Drift occurs 13-33× *below* standard detection thresholds in concept drift scenarios.
+What this shows:
+- Across states, *something* in P(X) always moves (birthplace codes, occupation mix), so a drift alarm tells you
+  the input changed, not that the model got worse. Many public-coverage deployments drift and get **more**
+  accurate.
+- Raw mean confidence is conservative here (20/44): the model is under-confident relative to its accuracy drop.
+  ATC calibrates a threshold on the holdout and catches 35/44 with no false alarms.
+- **Limits:** one model family, one source state, one year, and a 2-point "degraded" cutoff. ATC's largest
+  single miss is 7.6 points, so it is an estimate, not a substitute for periodic labels.
 
----
-
-## 📖 Abstract
-
-Data drift detection is the de facto standard for monitoring ML models in production. The premise is intuitive: if input distributions shift, model performance degrades. We demonstrate this premise is fundamentally flawed.
-
-Through comprehensive experiments across three major benchmarks (Folktables, CivilComments, Amazon Reviews) spanning 1.6 million test samples, we show that **drift detection achieves 0% true positive rate** on detecting actual model degradation. Even with optimized thresholds and multiple drift metrics (KS, Wasserstein, PSI, MMD), drift detection fails because:
-
-1. **Concept drift dominates** — P(Y|X) changes while P(X) remains stable
-2. **Threshold gap** — Drift magnitudes are 13-33× below detection thresholds
-3. **Information-theoretic barrier** — I(Drift; Degradation) → 0 under concept drift
-
-We prove an **impossibility theorem**: no drift detector can reliably detect model degradation without access to labels. We propose **Sentinel Monitoring**—tracking model confidence scores—which achieves r > 0.82 correlation with actual degradation across all benchmarks.
-
----
-
-## 🚀 Quick Start
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/YOUR_USERNAME/ml-sentinel.git
-cd ml-sentinel
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Or install as package
-pip install -e .
-```
-
-### Run Complete Analysis
+## Reproduce
 
 ```bash
-# One command to reproduce all results
-python experiments/run_all.py
-
-# Or run individual benchmarks
-python experiments/folktables_experiment.py
-python experiments/civilcomments_experiment.py
-python experiments/amazon_experiment.py
-```
-
----
-
-## 📊 Key Results
-
-### 1. Drift Detection Completely Fails
-
-<img src="figures/roc_comparison.png" width="700" alt="ROC Comparison">
-
-| Method | Folktables AUC | CivilComments AUC | Amazon AUC |
-|--------|----------------|-------------------|------------|
-| KS Drift | 0.91 | 0.88 | 0.60 |
-| **Sentinel** | **0.97** | **1.00** | **0.83** |
-
-### 2. The Threshold Gap Problem
-
-<img src="figures/threshold_gap.png" width="700" alt="Threshold Gap">
-
-| Benchmark | Max Drift (Degraded) | Industry Threshold | Gap |
-|-----------|---------------------|-------------------|-----|
-| Folktables | 0.142 | 0.15 | 1.06× (borderline) |
-| CivilComments | **0.0045** | 0.15 | **33×** |
-| Amazon | **0.012** | 0.15 | **13×** |
-
-### 3. Sentinel Monitoring Works
-
-<img src="figures/correlation_ci.png" width="700" alt="Correlation with CI">
-
-Tracking model confidence (expected max probability) correlates strongly with actual accuracy degradation, even without ground truth labels.
-
----
-
-## 🧮 Theoretical Results
-
-### Theorem 1 (Impossibility of Drift Detection)
-
-For any model *f* and any ε > 0, there exist distributions where:
-- d(P_test(X), P_train(X)) = 0 yet degradation > ε (concept drift)
-- d(P_test(X), P_train(X)) → ∞ yet degradation = 0 (covariate shift on invariant features)
-
-**Proof:** See `paper/theoretical_framework.md`
-
-### Theorem 2 (Information-Theoretic Lower Bound)
-
-```
-I(D(X); Δ_accuracy) ≤ I(P(X); P(Y|X))
-```
-
-Under concept drift where P(X) is constant but P(Y|X) changes, the right-hand side approaches zero, making drift detection information-theoretically impossible.
-
-### Proposition (Sentinel Calibration)
-
-For well-calibrated models:
-```
-E[max_y P(Y=y|X)] = Accuracy(f)
-```
-
-This provides a theoretical foundation for confidence-based monitoring.
-
----
-
-## 📁 Repository Structure
-
-```
-ml-sentinel/
-├── README.md                    # This file
-├── requirements.txt             # Dependencies
-├── setup.py                     # Package setup
-├── pyproject.toml              # Modern Python packaging
-│
-├── src/ml_sentinel/            # Core library
-│   ├── __init__.py
-│   ├── drift.py                # Drift detection methods
-│   ├── sentinel.py             # Sentinel monitoring
-│   ├── metrics.py              # Evaluation metrics
-│   └── utils.py                # Utilities
-│
-├── experiments/                 # Reproducible experiments
-│   ├── run_all.py              # Run everything
-│   ├── folktables_experiment.py
-│   ├── civilcomments_experiment.py
-│   ├── amazon_experiment.py
-│   └── analysis.py             # Statistical analysis
-│
-├── data/                        # Data handling
-│   ├── README.md               # Data download instructions
-│   └── download.py             # Download scripts
-│
-├── figures/                     # Generated figures
-│   ├── hero_figure.png
-│   ├── roc_comparison.png
-│   ├── correlation_ci.png
-│   └── threshold_gap.png
-│
-├── paper/                       # Paper materials
-│   ├── main.tex                # LaTeX source
-│   ├── best_paper_draft.md     # Draft
-│   └── theoretical_framework.md
-│
-├── tests/                       # Unit tests
-│   └── test_metrics.py
-│
-└── docs/                        # Documentation
-    ├── methodology.md
-    └── api_reference.md
-```
-
----
-
-## 🔬 Reproducibility
-
-### System Requirements
-- Python 3.9+
-- 8GB RAM minimum (16GB recommended)
-- ~2GB disk space for datasets
-
-### Step-by-Step Reproduction
-
-```bash
-# 1. Setup environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-# 2. Download data (automated)
-python data/download.py
-
-# 3. Run all experiments (~30 minutes)
-python experiments/run_all.py
-
-# 4. Generate figures
-python experiments/create_figures.py
-
-# 5. View results
-cat results/summary.json
-```
-
-### Expected Output
-
-```json
-{
-  "total_scenarios": 70,
-  "total_degraded": 35,
-  "total_detected": 0,
-  "drift_tpr": 0.0,
-  "sentinel_correlation": 0.88,
-  "total_samples": 1576624
-}
-```
-
----
-
-## 📈 Benchmarks
-
-### Folktables (ACS Income Prediction)
-- **Task:** Predict income >$50K from census features
-- **Shift:** Geographic (California → 50 states)
-- **Scale:** 1.4M samples across 50 states
-- **Finding:** 27/50 states show significant degradation, 0 detected by drift
-
-### CivilComments (Toxicity Detection)
-- **Task:** Detect toxic comments
-- **Shift:** Demographic groups (LGBTQ, Muslim, Black, White, etc.)
-- **Scale:** 71,854 test samples across 8 groups
-- **Finding:** 4/8 groups degraded (fairness gap), 0 detected by drift
-
-### Amazon Reviews (Sentiment Analysis)
-- **Task:** Predict review sentiment
-- **Shift:** Product categories (cross-domain)
-- **Scale:** 35,006 test samples across 10 categories
-- **Finding:** 5/10 categories degraded, 0 detected by drift
-
----
-
-## 🛠️ Core API
-
-```python
-from ml_sentinel import DriftDetector, SentinelMonitor
-
-# Initialize detectors
-drift = DriftDetector(method='ks', threshold=0.15)
-sentinel = SentinelMonitor()
-
-# Compute scores
-drift_score = drift.score(X_train, X_test)
-sentinel_score = sentinel.score(model, X_test)
-
-# Check alerts
-drift_alert = drift.alert(X_train, X_test)  # Always False in our experiments!
-sentinel_alert = sentinel.alert(model, X_test, threshold=0.05)
-
-# Compute correlation with actual degradation
-from ml_sentinel.metrics import compute_correlation
-r, p = compute_correlation(sentinel_scores, accuracy_drops)
-```
-
----
-
-## 📚 Extended Experiments
-
-### Additional Drift Metrics Tested
-
-| Metric | Description | Still Fails? |
-|--------|-------------|--------------|
-| KS Test | Maximum CDF difference | ✅ Yes |
-| Wasserstein | Earth mover's distance | ✅ Yes |
-| PSI | Population Stability Index | ✅ Yes |
-| MMD | Maximum Mean Discrepancy | ✅ Yes |
-| Chi-Square | Binned distribution test | ✅ Yes |
-
-### Calibration Robustness
-
-Sentinel monitoring remains effective even with miscalibrated models:
-
-| Miscalibration | Correlation Retention |
-|----------------|----------------------|
-| 1.0× (perfect) | 100% |
-| 1.5× | 98% |
-| 2.0× | 95% |
-| 3.0× | 89% |
-
----
-
-## ❓ FAQ
-
-**Q: Isn't the threshold too conservative?**  
-A: We tested thresholds from 0.01 to 0.30. Even at τ=0.01, only 2/35 degraded scenarios are detected (5.7% TPR) with 15% false positive rate.
-
-**Q: What about more sophisticated drift detectors?**  
-A: We tested KS, Wasserstein, PSI, MMD, and Chi-square. All fail because the *problem is fundamental*—concept drift doesn't manifest in P(X).
-
-**Q: Does Sentinel require labels?**  
-A: No! That's the key advantage. Sentinel uses model confidence, which is available at inference time.
-
-**Q: What if the model is poorly calibrated?**  
-A: We show 95% correlation retention at 2× miscalibration. Temperature scaling can further improve results.
-
----
-
-## 📄 Paper
-
-**Why Drift Detection Fails: An Empirical and Theoretical Analysis of ML Monitoring**
-
-[📥 Download PDF](paper/main.pdf) | [📑 arXiv](https://arxiv.org/abs/XXXX.XXXXX) | [🎥 Video](https://youtube.com/...)
-
-### Citation
-
-```bibtex
-@inproceedings{sentinel2026,
-  title={Why Drift Detection Fails: An Empirical and Theoretical Analysis of ML Monitoring},
-  author={[Authors]},
-  booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
-  year={2026}
-}
-```
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-### Development Setup
-
-```bash
-git clone https://github.com/YOUR_USERNAME/ml-sentinel.git
-cd ml-sentinel
-pip install -e ".[dev]"
+pip install -e ".[experiments]"
+python experiments/folktables_benchmark.py --data-dir data/acs   # downloads ~0.7 GB of census zips once, ~15 min CPU
+python experiments/make_figures.py
 pytest tests/
 ```
 
----
+The run is deterministic (seed 42) and resumable: it appends to the results CSV and skips finished deployments.
 
-## 📜 License
+## Library
 
-MIT License - see [LICENSE](LICENSE) for details.
+```python
+from ml_sentinel import ks_drift, psi_drift, SentinelMonitor, atc_threshold, atc_accuracy
 
----
+t = atc_threshold(model.predict_proba(X_val), y_val)      # fit on labeled in-distribution data
+est_acc = atc_accuracy(model.predict_proba(X_prod), t)    # estimate on unlabeled production data
 
-## 🙏 Acknowledgments
+drift = psi_drift(X_train, X_prod)                        # max per-feature PSI
+```
 
-- [Folktables](https://github.com/socialfoundations/folktables) for the ACS data
-- [WILDS](https://wilds.stanford.edu/) for CivilComments and Amazon benchmarks
-- This research was supported by [Your Institution/Grant]
+`src/ml_sentinel/` also has Wasserstein, MMD and chi-square drift, ECE, and bootstrap/correlation helpers.
+[`paper/theoretical_framework.md`](paper/theoretical_framework.md) has notes on why drift and degradation can
+separate (concept shift vs benign covariate shift).
 
----
+## Credits
 
-<div align="center">
+ATC is from Garg et al., *Leveraging Unlabeled Data to Predict Out-of-Distribution Performance* (ICLR 2022).
+Data and task definitions are from Ding et al., *Retiring Adult* (NeurIPS 2021) / folktables.
 
-**⭐ Star this repo if you find it useful! ⭐**
-
-Made with ❤️ for the ML community
-
-</div>
+MIT License.
