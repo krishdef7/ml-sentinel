@@ -43,8 +43,8 @@ from ml_sentinel import (  # noqa: E402
     SentinelMonitor,
     atc_accuracy,
     atc_threshold,
-    ks_drift,
-    psi_drift,
+    ks_scores,
+    psi_scores,
 )
 
 try:
@@ -121,6 +121,7 @@ def run(data_dir: Path) -> None:
             continue
         X, y, _ = task.df_to_numpy(ca)
         drift_cols = [i for i, f in enumerate(task.features) if f != "ST"]
+        drift_names = [task.features[i] for i in drift_cols]
         X_tr, X_ho, y_tr, y_ho = train_test_split(
             X, y, test_size=0.3, random_state=SEED, stratify=y
         )
@@ -139,6 +140,8 @@ def run(data_dir: Path) -> None:
             ps = model.predict_proba(Xs)
             acc = float((ps.argmax(1) == ys).mean())
             conf = monitor.score_from_predictions(ps)
+            ks = ks_scores(X_tr[:, drift_cols], Xs[:, drift_cols])
+            psi = psi_scores(X_tr[:, drift_cols], Xs[:, drift_cols])
             row = {
                 "task": task_name,
                 "state": state,
@@ -146,10 +149,12 @@ def run(data_dir: Path) -> None:
                 "ca_holdout_acc": ho_acc,
                 "acc": acc,
                 "acc_drop": ho_acc - acc,
-                "ks_max": ks_drift(X_tr[:, drift_cols], Xs[:, drift_cols]),
-                "psi_max": psi_drift(X_tr[:, drift_cols], Xs[:, drift_cols]),
+                "ks_max": float(ks.max()),
+                "psi_max": float(psi.max()),
                 "conf_drop": ho_conf - conf,
                 "atc_drop": ho_acc - atc_accuracy(ps, t_atc),
+                "ks_feature": drift_names[int(ks.argmax())],
+                "psi_feature": drift_names[int(psi.argmax())],
             }
             pd.DataFrame([row]).to_csv(
                 RESULTS_CSV, mode="a", header=not RESULTS_CSV.exists(), index=False
@@ -220,6 +225,31 @@ def summarize() -> dict:
         }
         for t, g in df.groupby("task")
     }
+    for t, g in df.groupby("task"):
+        out["per_task"][t]["atc_mae"] = float((g["atc_drop"] - g["acc_drop"]).abs().mean())
+        if "ks_feature" in g:
+            out["per_task"][t]["ks_feature_counts"] = g["ks_feature"].value_counts().to_dict()
+            out["per_task"][t]["psi_feature_counts"] = g["psi_feature"].value_counts().to_dict()
+    err = df["atc_drop"] - df["acc_drop"]
+    out["signals"]["atc_drop"]["max_abs_error"] = float(err.abs().max())
+    out["signals"]["atc_drop"]["mean_error"] = float(err.mean())
+    # Sensitivity to the 2-point "degraded" cutoff: re-label deployments at other
+    # cutoffs. Drift thresholds stay fixed; the confidence and ATC alarms use the
+    # cutoff itself as their threshold (alarm when the estimated drop exceeds it).
+    out["cutoff_sensitivity"] = {}
+    for cut in (0.01, 0.02, 0.03, 0.05):
+        deg = df["acc_drop"] > cut
+        thr = {"ks_max": KS_THRESHOLD, "psi_max": PSI_THRESHOLD, "conf_drop": cut, "atc_drop": cut}
+        out["cutoff_sensitivity"][f"{cut:.2f}"] = {
+            "n_degraded": int(deg.sum()),
+            **{
+                c: {
+                    "alarms_on_degraded": int(((df[c] > v) & deg).sum()),
+                    "alarms_on_healthy": int(((df[c] > v) & ~deg).sum()),
+                }
+                for c, v in thr.items()
+            },
+        }
     SUMMARY_JSON.write_text(json.dumps(out, indent=2))
     print(json.dumps(out, indent=2))
     return out

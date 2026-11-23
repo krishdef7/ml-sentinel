@@ -4,18 +4,18 @@ Sentinel Monitoring
 
 Label-free accuracy monitoring from model confidence.
 
-For a calibrated model, E[max P(Y|X)] = accuracy. Under shift calibration
-degrades, so two estimators are provided:
+For a calibrated model, E[max P(Y|X)] = accuracy. Under shift the model can
+become over- or under-confident, so two estimators are provided:
 - SentinelMonitor: drop in mean max-probability (average confidence).
 - atc_threshold / atc_accuracy: Average Thresholded Confidence
   (Garg et al., "Leveraging Unlabeled Data to Predict Out-of-Distribution
   Performance", ICLR 2022).
 """
 
+from typing import Any, Callable, Optional
+
 import numpy as np
-from typing import Callable, Optional, Union, Any
 from scipy.special import softmax
-import warnings
 
 
 def compute_confidence_score(predictions: np.ndarray, method: str = "max_prob") -> float:
@@ -277,7 +277,13 @@ def atc_threshold(predictions: np.ndarray, labels: np.ndarray) -> float:
     Fit the ATC confidence threshold on labeled in-distribution data.
 
     Returns t such that the fraction of samples with confidence <= t equals
-    the error rate on this data.
+    the error rate on this data. Equivalently, the fraction above t equals the
+    accuracy, so ``atc_accuracy(predictions, t)`` reproduces the source
+    accuracy by construction. On new data, ATC reports the fraction of rows
+    above the same t.
+
+    This uses max-probability as the confidence score; Garg et al. also use
+    negative entropy.
     """
     predictions = np.atleast_2d(predictions)
     if predictions.shape[1] == 1:

@@ -1,144 +1,85 @@
-# Notes: why input drift and accuracy degradation can separate
+# Notes: why input drift and accuracy can separate, and what a label-free monitor can and cannot see
 
-## 3.1 Formal Setup
+These are short notes behind the benchmark, not new theory. Both constructions below are standard
+textbook examples.
 
-Let $\mathcal{X} \subseteq \mathbb{R}^d$ be an input space and $\mathcal{Y} = \{0, 1\}$ the label space.
+## Setup
 
-**Definition 1 (Training Distribution):** $P_{\text{train}}(X, Y)$ is the joint distribution over input-label pairs used to train model $f: \mathcal{X} \rightarrow \mathcal{Y}$.
+A model $f$ is trained on a source distribution $P_S(X, Y)$ and deployed on a target $P_T(X, Y)$, with
+binary $Y$. Accuracy on a distribution $P$ is $\mathrm{Acc}_P(f) = P(f(X) = Y)$. The deployment is
+*degraded* if $\mathrm{Acc}_T(f) < \mathrm{Acc}_S(f) - \epsilon$ (the benchmark uses $\epsilon = 0.02$).
 
-**Definition 2 (Deployment Distribution):** $P_{\text{test}}(X, Y)$ is the joint distribution encountered during deployment.
+Write the joint as $P(X, Y) = P(X)\,P(Y \mid X)$. Shift can come from either factor:
 
-**Definition 3 (Covariate Shift):** Covariate shift occurs when $P_{\text{test}}(X) \neq P_{\text{train}}(X)$ but $P_{\text{test}}(Y|X) = P_{\text{train}}(Y|X)$.
+- **covariate shift**: $P_T(X) \ne P_S(X)$, $P_T(Y \mid X) = P_S(Y \mid X)$
+- **concept shift**: $P_T(Y \mid X) \ne P_S(Y \mid X)$
 
-**Definition 4 (Model Degradation):** Degradation of magnitude $\epsilon$ occurs when:
-$$\text{Acc}(f, P_{\text{test}}) < \text{Acc}(f, P_{\text{train}}) - \epsilon$$
+An input-drift monitor sees only samples of $X$ from the source and target. So does every other
+*label-free* monitor, including confidence-based ones, since the confidence $c(x) = \max_y \hat p(y \mid x)$
+is a fixed function of $x$.
 
-**Definition 5 (Drift Detector):** A drift detector $D: \{X_1,...,X_n\} \rightarrow \{0,1\}$ maps a sample to a binary decision based solely on input statistics.
+## 1. Drift without degradation
 
-**Definition 6 (Silent Degradation):** Degradation that occurs without detectable covariate shift:
-- $\text{Acc}(f, P_{\text{test}}) < \text{Acc}(f, P_{\text{train}}) - \epsilon$ (degradation present)
-- $D(X_{\text{test}}) = 0$ for any drift detector $D$ (no drift detected)
+Let the source put most of its mass near the decision boundary and the target put its mass far from it,
+with the same $P(Y \mid X)$. The target marginal is far from the source (any divergence is large), but
+points far from the boundary are easier, so accuracy can go **up**.
 
----
+The benchmark shows this happening: many public-coverage deployments drift past the PSI threshold and are
+more accurate than California.
 
-## 3.2 The Separation Theorem
+## 2. Degradation without drift
 
-**Theorem 1 (Separation of Drift and Degradation):**
+Keep $P_T(X) = P_S(X)$, so every drift score is zero in expectation. Say the model predicts 1 on a region
+$R_+$ holding half the mass and 0 on the rest. If $P_S(Y = 1 \mid R_+) = 0.9$ and
+$P_S(Y = 1 \mid R_-) = 0.1$, source accuracy is 0.9. Change only the labels: $P_T(Y = 1 \mid R_+) = 0.6$ and
+$P_T(Y = 1 \mid R_-) = 0.4$. Target accuracy is 0.6, a 30-point drop with zero input drift.
 
-For any model $f$ and any $\epsilon > 0$, there exist distributions $P_{\text{test}}$ such that:
+**This example breaks confidence-based monitors too.** The model's confidences depend only on $x$, and the
+distribution of $x$ did not change, so mean confidence and ATC report no change either. No method that sees
+only unlabeled inputs can tell this target from the source. Garg et al. (2022) make the same point
+formally: estimating target accuracy from unlabeled data is impossible without assumptions on the shift.
+Label-free monitoring is therefore a cheap early signal between label refreshes, not a replacement for them.
 
-**(a) Undetectable Degradation:**
-$$d(P_{\text{test}}(X), P_{\text{train}}(X)) < \delta \text{ for arbitrarily small } \delta > 0$$
-yet
-$$\text{Acc}(f, P_{\text{test}}) < \text{Acc}(f, P_{\text{train}}) - \epsilon$$
+## 3. When confidence can work
 
-**(b) Detectable Non-Degradation:**
-$$d(P_{\text{test}}(X), P_{\text{train}}(X)) > \tau \text{ for any threshold } \tau$$
-yet
-$$\text{Acc}(f, P_{\text{test}}) \geq \text{Acc}(f, P_{\text{train}})$$
+Suppose the shift is covariate shift and the model's confidence is right pointwise:
+$P(f(X) = Y \mid X = x) = c(x)$ for every $x$. Then for any target with the same $P(Y \mid X)$,
 
-where $d(\cdot,\cdot)$ is any divergence measure on marginal distributions.
+$$\mathbb{E}_T[c(X)] = \mathbb{E}_T\big[P(f(X) = Y \mid X)\big] = \mathrm{Acc}_T(f),$$
 
-### Proof
+so mean confidence is unbiased. Ordinary (binned) calibration on the source is weaker than this and does
+not carry over to a new $P(X)$, which is one reason raw mean confidence can be off.
 
-**Part (a) - Constructive Existence:**
+ATC (Garg et al., ICLR 2022) does not use confidence as a probability. It picks a threshold $t$ on labeled
+source data so that the share of source points with $c(x) > t$ equals source accuracy, then reports the share
+of target points above $t$. It is exact on the source by construction, and it stays close when the shift
+mostly moves points across confidence levels without changing how errors relate to confidence.
 
-Consider a binary classification task with decision boundary $\mathcal{B}$ partitioning $\mathcal{X}$ into regions $R_+$ (predicted positive) and $R_-$ (predicted negative).
+In the benchmark, the model's mean confidence drops less than its accuracy does (it is under-confident on
+the shifted states), which is why the raw confidence alarm catches 20 of 44 degraded deployments and ATC
+catches 35.
 
-Let $P_{\text{train}}$ be a distribution where:
-- Support is uniform over $\mathcal{X}$
-- $P(Y=1|X \in R_+) = 0.9$, $P(Y=1|X \in R_-) = 0.1$
+## 4. Relation to the domain adaptation bound
 
-Define $P_{\text{test}}$ with identical marginal $P_{\text{test}}(X) = P_{\text{train}}(X)$, but:
-- $P(Y=1|X \in R_+) = 0.6$, $P(Y=1|X \in R_-) = 0.4$
+Ben-David et al. (2010) bound target error by
 
-The marginals are **identical**, so $d(P_{\text{test}}(X), P_{\text{train}}(X)) = 0$.
+$$\epsilon_T(h) \le \epsilon_S(h) + \tfrac{1}{2} d_{\mathcal{H}\Delta\mathcal{H}}(P_S, P_T) + \lambda,$$
 
-However:
-- Train accuracy: $0.5 \cdot 0.9 + 0.5 \cdot 0.9 = 0.9$ (90%)
-- Test accuracy: $0.5 \cdot 0.6 + 0.5 \cdot 0.6 = 0.6$ (60%)
-- **Degradation: 30%** (massive!)
+where $d_{\mathcal{H}\Delta\mathcal{H}}$ is a divergence between the input marginals and $\lambda$ is the
+error of the best single hypothesis on both domains. Construction 2 has zero marginal divergence, and the
+drop shows up through $\lambda$, which depends on labels. Construction 1 shows the bound can be loose: a
+large divergence does not force a large error.
 
-This constructs a distribution with **ZERO drift** but **MASSIVE degradation**. ∎
+## What this means for the benchmark
 
-**Part (b) - Benign Shift:**
+The cross-state ACS shifts are a mix of both kinds. The benchmark measures how the signals behave on those
+real shifts. It does not prove that ATC works in general, and the constructions above show it cannot.
 
-Let $P_{\text{train}}$ be concentrated near the decision boundary $\mathcal{B}$.
-Let $P_{\text{test}}$ be shifted far from $\mathcal{B}$ but with the same class-conditional structure.
+## References
 
-Then:
-- $d(P_{\text{test}}(X), P_{\text{train}}(X))$ is large (different regions of $\mathcal{X}$)
-- But accuracy may **improve** (farther from boundary = easier classification)
-
-This constructs a distribution with **LARGE drift** but **NO degradation**. ∎
-
----
-
-## 3.3 Information-Theoretic Lower Bound
-
-**Theorem 2 (No-Free-Lunch for Drift Detection):**
-
-Let $D$ be any drift detector that observes only inputs $\{X_1,...,X_n\}$.
-Let $\Delta(f, P_{\text{test}}) = \text{Acc}(f, P_{\text{train}}) - \text{Acc}(f, P_{\text{test}})$ denote degradation.
-
-Then:
-$$I(D(X); \Delta(f, P_{\text{test}})) \leq I(P_{\text{test}}(X); P_{\text{test}}(Y|X))$$
-
-where $I(\cdot;\cdot)$ denotes mutual information.
-
-**Interpretation:** The information a drift detector can provide about degradation is bounded by the information the marginal distribution provides about the conditional distribution. Under concept drift (where $P(Y|X)$ changes), this bound is typically **zero**.
-
-### Proof Sketch
-
-By the data processing inequality:
-$$I(D(X); \Delta) \leq I(X; \Delta) = I(X; g(Y, \hat{Y}))$$
-
-where $g$ computes accuracy from true and predicted labels.
-
-Since $D$ only observes $X$, not $Y$, and $\hat{Y} = f(X)$ is deterministic:
-$$I(D(X); \Delta) \leq H(\Delta) - H(\Delta | X)$$
-
-But $\Delta$ depends on $P(Y|X)$, which is **not observable** from $X$ alone. Thus the conditional entropy $H(\Delta | X)$ remains high, and the mutual information approaches zero. ∎
-
----
-
-## 3.4 Connection to Established Theory
-
-### Relationship to Ben-David et al. (2010)
-
-The classic domain adaptation bound states:
-$$\epsilon_T(h) \leq \epsilon_S(h) + d_{\mathcal{H}\Delta\mathcal{H}}(D_S, D_T) + \lambda$$
-
-where $\lambda$ is the optimal joint error. Our result shows that even when $d_{\mathcal{H}\Delta\mathcal{H}} \approx 0$ (no distributional divergence), $\lambda$ can be arbitrarily large, causing degradation.
-
-### Relationship to Importance Weighting
-
-Under covariate shift, importance weighting corrects for $P_{\text{test}}(X) / P_{\text{train}}(X)$. Our result shows this is **insufficient** when $P(Y|X)$ changes—the weights are correct but the labels are wrong.
-
-### Relationship to Conformal Prediction
-
-Conformal prediction provides valid coverage under exchangeability. Our work shows that coverage validity does not imply accuracy preservation—a model can have valid confidence sets but still be wrong.
-
----
-
-## 3.5 Implications
-
-**Implication 1:** No amount of input monitoring can guarantee detection of all degradation.
-
-**Implication 2:** Effective monitoring must incorporate information **downstream** of the decision boundary—i.e., model outputs or predictions.
-
-**Implication 3:** Confidence distribution monitoring (our proposed alternative) satisfies this requirement by observing $P(f(X))$ rather than just $P(X)$.
-
----
-
-## 3.6 Why Confidence Monitoring Works
-
-**Proposition 1:** If model $f$ is calibrated, then:
-$$\mathbb{E}[\max_y P(Y=y|X)] = \text{Acc}(f)$$
-
-Thus, monitoring the confidence distribution directly tracks accuracy.
-
-**Proposition 2:** Even under miscalibration, the **relative change** in confidence distribution correlates with accuracy change:
-$$\text{Corr}(\Delta\text{Conf}, \Delta\text{Acc}) > 0$$
-
-This explains our empirical finding of $r > 0.87$ across all benchmarks.
+- S. Garg, S. Balakrishnan, Z. Lipton, B. Neyshabur, H. Sedghi. *Leveraging Unlabeled Data to Predict
+  Out-of-Distribution Performance.* ICLR 2022.
+- S. Ben-David, J. Blitzer, K. Crammer, A. Kulesza, F. Pereira, J. Vaughan. *A theory of learning from
+  different domains.* Machine Learning, 2010.
+- F. Ding, M. Hardt, J. Miller, L. Schmidt. *Retiring Adult: New Datasets for Fair Machine Learning.*
+  NeurIPS 2021.

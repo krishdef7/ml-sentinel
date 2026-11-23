@@ -188,10 +188,6 @@ class TestIntegration:
         assert tpr < 0.1  # Less than 10% detected
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
-
-
 class TestATC:
     """Tests for Average Thresholded Confidence."""
 
@@ -216,3 +212,42 @@ class TestATC:
         t = atc_threshold(probs, labels)
         shifted = 0.5 + 0.5 * (probs - 0.5)  # same argmax, less confident
         assert atc_accuracy(shifted, t) < atc_accuracy(probs, t)
+
+    def test_atc_exact_on_its_own_source_data(self):
+        from ml_sentinel import atc_accuracy, atc_threshold
+
+        rng = np.random.default_rng(2)
+        p1 = rng.uniform(0, 1, 2001)
+        probs = np.column_stack([1 - p1, p1])
+        labels = (rng.uniform(0, 1, 2001) < p1).astype(int)
+        t = atc_threshold(probs, labels)
+        assert atc_accuracy(probs, t) == pytest.approx(np.mean(probs.argmax(1) == labels), abs=1e-3)
+
+
+class TestPerFeatureScores:
+    def test_scores_identify_the_shifted_feature(self):
+        from ml_sentinel import ks_scores, psi_scores
+
+        rng = np.random.default_rng(0)
+        X_ref = rng.normal(size=(3000, 4))
+        X_test = rng.normal(size=(3000, 4))
+        X_test[:, 2] += 1.0
+        assert ks_scores(X_ref, X_test).argmax() == 2
+        assert psi_scores(X_ref, X_test).argmax() == 2
+        assert ks_drift(X_ref, X_test) == ks_scores(X_ref, X_test).max()
+
+    def test_one_dimensional_input(self):
+        rng = np.random.default_rng(0)
+        assert ks_drift(rng.normal(size=500), rng.normal(size=500) + 3) > 0.8
+
+    def test_explicit_zero_threshold_is_kept(self):
+        assert DriftDetector(method="ks", threshold=0.0).threshold == 0.0
+        assert DriftDetector(method="ks").threshold == 0.10
+
+    def test_mmd_is_reproducible(self):
+        from ml_sentinel import mmd_drift
+
+        rng = np.random.default_rng(0)
+        A, B = rng.normal(size=(3000, 3)), rng.normal(size=(3000, 3)) + 0.5
+        assert mmd_drift(A, B) == mmd_drift(A, B)
+        assert mmd_drift(A, B) > mmd_drift(A, rng.normal(size=(3000, 3)))

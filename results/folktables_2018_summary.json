@@ -1,0 +1,203 @@
+{
+  "data": "ACS 2018 1-Year, train CA, test 49 other states",
+  "n_scenarios": 147,
+  "n_test_samples": 5273757,
+  "degraded_definition": "accuracy drop vs CA holdout > 2% absolute",
+  "n_degraded": 44,
+  "signals": {
+    "ks_max": {
+      "threshold": 0.1,
+      "tpr": 1.0,
+      "fpr": 0.9902912621359223,
+      "auroc": 0.8620917917034423,
+      "auroc_ci95": [
+        0.7839498721319098,
+        0.931163051036017
+      ],
+      "spearman_vs_acc_drop": 0.5240764947222873
+    },
+    "psi_max": {
+      "threshold": 0.25,
+      "tpr": 1.0,
+      "fpr": 0.8932038834951457,
+      "auroc": 0.9218887908208296,
+      "auroc_ci95": [
+        0.8611322712904617,
+        0.9710749833303024
+      ],
+      "spearman_vs_acc_drop": 0.6230458862552797
+    },
+    "conf_drop": {
+      "threshold": 0.02,
+      "tpr": 0.45454545454545453,
+      "fpr": 0.0,
+      "auroc": 0.9772727272727273,
+      "auroc_ci95": [
+        0.9461605542465524,
+        0.998676081200353
+      ],
+      "spearman_vs_acc_drop": 0.9318279699884396,
+      "mae_vs_acc_drop": 0.02324731340235582
+    },
+    "atc_drop": {
+      "threshold": 0.02,
+      "tpr": 0.7954545454545454,
+      "fpr": 0.0,
+      "auroc": 0.98477493380406,
+      "auroc_ci95": [
+        0.953156572492473,
+        1.0
+      ],
+      "spearman_vs_acc_drop": 0.9316579649260668,
+      "mae_vs_acc_drop": 0.013204175710693785,
+      "max_abs_error": 0.07636539391010144,
+      "mean_error": -0.002464166497287616
+    }
+  },
+  "per_task": {
+    "employment": {
+      "n_degraded": 1,
+      "n": 49,
+      "median_acc_drop": -0.00795072421728893,
+      "max_acc_drop": 0.02260016951367172,
+      "spearman_vs_acc_drop": {
+        "ks_max": 0.049081632653061216,
+        "psi_max": 0.15999999999999998,
+        "conf_drop": 0.671530612244898,
+        "atc_drop": 0.8095918367346938
+      },
+      "atc_mae": 0.004465776838900907,
+      "ks_feature_counts": {
+        "RAC1P": 46,
+        "CIT": 2,
+        "ANC": 1
+      },
+      "psi_feature_counts": {
+        "RAC1P": 46,
+        "NATIVITY": 1,
+        "ANC": 1,
+        "CIT": 1
+      }
+    },
+    "income": {
+      "n_degraded": 41,
+      "n": 49,
+      "median_acc_drop": 0.04351530658152647,
+      "max_acc_drop": 0.0973220450024046,
+      "spearman_vs_acc_drop": {
+        "ks_max": 0.026428571428571426,
+        "psi_max": 0.42122448979591837,
+        "conf_drop": 0.8975510204081633,
+        "atc_drop": 0.8901020408163264
+      },
+      "atc_mae": 0.011363625889540901,
+      "ks_feature_counts": {
+        "POBP": 49
+      },
+      "psi_feature_counts": {
+        "POBP": 49
+      }
+    },
+    "public_coverage": {
+      "n_degraded": 2,
+      "n": 49,
+      "median_acc_drop": -0.06090363025420342,
+      "max_acc_drop": 0.043641816937801114,
+      "spearman_vs_acc_drop": {
+        "ks_max": -0.13744897959183672,
+        "psi_max": 0.054897959183673455,
+        "conf_drop": 0.5539795918367346,
+        "atc_drop": 0.5477551020408163
+      },
+      "atc_mae": 0.023783124403639548,
+      "ks_feature_counts": {
+        "RAC1P": 46,
+        "CIT": 2,
+        "ANC": 1
+      },
+      "psi_feature_counts": {
+        "RAC1P": 47,
+        "ANC": 1,
+        "CIT": 1
+      }
+    }
+  },
+  "cutoff_sensitivity": {
+    "0.01": {
+      "n_degraded": 49,
+      "ks_max": {
+        "alarms_on_degraded": 49,
+        "alarms_on_healthy": 97
+      },
+      "psi_max": {
+        "alarms_on_degraded": 49,
+        "alarms_on_healthy": 87
+      },
+      "conf_drop": {
+        "alarms_on_degraded": 37,
+        "alarms_on_healthy": 1
+      },
+      "atc_drop": {
+        "alarms_on_degraded": 45,
+        "alarms_on_healthy": 3
+      }
+    },
+    "0.02": {
+      "n_degraded": 44,
+      "ks_max": {
+        "alarms_on_degraded": 44,
+        "alarms_on_healthy": 102
+      },
+      "psi_max": {
+        "alarms_on_degraded": 44,
+        "alarms_on_healthy": 92
+      },
+      "conf_drop": {
+        "alarms_on_degraded": 20,
+        "alarms_on_healthy": 0
+      },
+      "atc_drop": {
+        "alarms_on_degraded": 35,
+        "alarms_on_healthy": 0
+      }
+    },
+    "0.03": {
+      "n_degraded": 35,
+      "ks_max": {
+        "alarms_on_degraded": 35,
+        "alarms_on_healthy": 111
+      },
+      "psi_max": {
+        "alarms_on_degraded": 35,
+        "alarms_on_healthy": 101
+      },
+      "conf_drop": {
+        "alarms_on_degraded": 4,
+        "alarms_on_healthy": 0
+      },
+      "atc_drop": {
+        "alarms_on_degraded": 26,
+        "alarms_on_healthy": 0
+      }
+    },
+    "0.05": {
+      "n_degraded": 19,
+      "ks_max": {
+        "alarms_on_degraded": 19,
+        "alarms_on_healthy": 127
+      },
+      "psi_max": {
+        "alarms_on_degraded": 19,
+        "alarms_on_healthy": 117
+      },
+      "conf_drop": {
+        "alarms_on_degraded": 0,
+        "alarms_on_healthy": 0
+      },
+      "atc_drop": {
+        "alarms_on_degraded": 7,
+        "alarms_on_healthy": 1
+      }
+    }
+  }
+}

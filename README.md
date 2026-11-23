@@ -53,13 +53,39 @@ task the picture is clearer:
 | Public coverage (2/49) | −0.14 | 0.05 | 0.55 | 0.55 |
 
 What this shows:
-- Across states, *something* in P(X) always moves (birthplace codes, occupation mix), so a drift alarm tells you
-  the input changed, not that the model got worse. Many public-coverage deployments drift and get **more**
-  accurate.
+- Across states, *something* in P(X) always moves, so a drift alarm tells you the input changed, not that the
+  model got worse. The feature behind the max score is the same almost everywhere: place of birth (`POBP`) in
+  all 49 income deployments, and race (`RAC1P`) in 46 of 49 for both employment and public coverage. Those are
+  just demographic differences between California and other states. In public coverage, 46 of 49 states are
+  **more** accurate than the CA holdout, and 42 of those 46 still trip the PSI alarm.
 - Raw mean confidence is conservative here (20/44): the model is under-confident relative to its accuracy drop.
   ATC calibrates a threshold on the holdout and catches 35/44 with no false alarms.
-- **Limits:** one model family, one source state, one year, and a 2-point "degraded" cutoff. ATC's largest
-  single miss is 7.6 points, so it is an estimate, not a substitute for periodic labels.
+- ATC's 9 misses are 7 income states plus employment and public coverage in Alaska. In 8 of them it saw a drop
+  but underestimated it (income in Idaho: real drop 5.1 points, ATC estimate 1.8); for public coverage in Alaska
+  it predicted an improvement. Its largest single error is in the safe direction: public
+  coverage in Vermont improved by 2.7 points and ATC said 10.4.
+
+**Does the 2-point cutoff matter?** Same runs, re-labelled at other cutoffs. Drift thresholds stay fixed; the
+confidence and ATC alarms use the cutoff as their threshold.
+
+| "Degraded" cutoff | Degraded | KS alarms (degraded / healthy) | PSI | Mean confidence | ATC |
+|---|---|---|---|---|---|
+| 1 point | 49 | 49 / 97 | 49 / 87 | 37 / 1 | 45 / 3 |
+| 2 points | 44 | 44 / 102 | 44 / 92 | 20 / 0 | 35 / 0 |
+| 3 points | 35 | 35 / 111 | 35 / 101 | 4 / 0 | 26 / 0 |
+| 5 points | 19 | 19 / 127 | 19 / 117 | 0 / 0 | 7 / 1 |
+
+The drift result does not depend on the cutoff: the alarms fire almost everywhere at every cutoff. ATC's recall
+does fall as the cutoff rises, because it tends to underestimate large drops (the income deployments that lost
+5 or more points). It still ranks them correctly (within-task Spearman 0.89 for income), so a lower alarm
+threshold or a ranking-based alert would catch more of them.
+
+**Limits.** One model family (gradient-boosted trees), one source state, one year. Accuracy is per person
+record, without the ACS survey weights. KS and PSI treat categorical codes (occupation, birthplace) as ordered
+numbers, which is common practice but crude. The bootstrap intervals resample deployments and ignore that
+deployments of the same task are related. And no label-free method, ATC included, can detect a change in
+P(Y|X) when P(X) stays the same ([notes](paper/theoretical_framework.md)), so ATC is an early signal between
+label refreshes, not a substitute for them.
 
 ## Reproduce
 
@@ -71,21 +97,24 @@ pytest tests/
 ```
 
 The run is deterministic (seed 42) and resumable: it appends to the results CSV and skips finished deployments.
+`--summarize` rebuilds the summary JSON from the CSV without touching the data. A full rerun from scratch
+reproduces every row of the committed CSV exactly.
 
 ## Library
 
 ```python
-from ml_sentinel import ks_drift, psi_drift, SentinelMonitor, atc_threshold, atc_accuracy
+from ml_sentinel import psi_drift, psi_scores, atc_threshold, atc_accuracy
 
 t = atc_threshold(model.predict_proba(X_val), y_val)      # fit on labeled in-distribution data
 est_acc = atc_accuracy(model.predict_proba(X_prod), t)    # estimate on unlabeled production data
 
 drift = psi_drift(X_train, X_prod)                        # max per-feature PSI
+per_feature = psi_scores(X_train, X_prod)                 # one PSI per feature, to see what moved
 ```
 
-`src/ml_sentinel/` also has Wasserstein, MMD and chi-square drift, ECE, and bootstrap/correlation helpers.
-[`paper/theoretical_framework.md`](paper/theoretical_framework.md) has notes on why drift and degradation can
-separate (concept shift vs benign covariate shift).
+`src/ml_sentinel/` also has KS, Wasserstein, chi-square and MMD drift, mean-confidence monitoring, ECE, and
+bootstrap/correlation helpers. [`paper/theoretical_framework.md`](paper/theoretical_framework.md) has short notes
+on why drift and degradation can separate, and on what any label-free monitor (ATC included) cannot see.
 
 ## Credits
 

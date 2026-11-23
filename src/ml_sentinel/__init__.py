@@ -11,30 +11,53 @@ cross-state deployments of ACS (folktables) models.
 >>> est_acc = atc_accuracy(model.predict_proba(X_prod), t)
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "Krish Garg"
 
-from .drift import DriftDetector, ks_drift, wasserstein_drift, psi_drift, mmd_drift
-from .sentinel import SentinelMonitor, atc_accuracy, atc_threshold, compute_confidence_score
+from .drift import (
+    DriftDetector,
+    chi2_drift,
+    chi2_scores,
+    ks_drift,
+    ks_scores,
+    mmd_drift,
+    psi_drift,
+    psi_scores,
+    wasserstein_drift,
+    wasserstein_scores,
+)
+from .sentinel import (
+    SentinelMonitor,
+    atc_accuracy,
+    atc_threshold,
+    calibration_error,
+    compute_confidence_score,
+)
 from .metrics import (
+    bootstrap_ci,
     compute_correlation,
     compute_roc_auc,
     compute_tpr_at_threshold,
-    bootstrap_ci,
 )
 
 __all__ = [
     # Input drift
     "DriftDetector",
     "ks_drift",
-    "wasserstein_drift",
+    "ks_scores",
     "psi_drift",
+    "psi_scores",
+    "wasserstein_drift",
+    "wasserstein_scores",
+    "chi2_drift",
+    "chi2_scores",
     "mmd_drift",
     # Label-free accuracy estimation
     "SentinelMonitor",
     "compute_confidence_score",
     "atc_threshold",
     "atc_accuracy",
+    "calibration_error",
     # Metrics
     "compute_correlation",
     "compute_roc_auc",
