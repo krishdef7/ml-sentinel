@@ -58,8 +58,9 @@ What this shows:
   all 49 income deployments, and race (`RAC1P`) in 46 of 49 for both employment and public coverage. Those are
   just demographic differences between California and other states. In public coverage, 46 of 49 states are
   **more** accurate than the CA holdout, and 42 of those 46 still trip the PSI alarm.
-- Raw mean confidence is conservative here (20/44): the model is under-confident relative to its accuracy drop.
-  ATC calibrates a threshold on the holdout and catches 35/44 with no false alarms.
+- Raw mean confidence moves in the right direction but by too little (20/44). On every one of the 44 degraded
+  deployments it fell less than accuracy did (1.9 vs 4.7 points on average), so the model is over-confident on
+  those states. ATC calibrates a threshold on the holdout and catches 35/44 with no false alarms.
 - ATC's 9 misses are 7 income states plus employment and public coverage in Alaska. In 8 of them it saw a drop
   but underestimated it (income in Idaho: real drop 5.1 points, ATC estimate 1.8); for public coverage in Alaska
   it predicted an improvement. Its largest single error is in the safe direction: public

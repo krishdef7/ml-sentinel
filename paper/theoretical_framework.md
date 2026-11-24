@@ -55,8 +55,8 @@ source data so that the share of source points with $c(x) > t$ equals source acc
 of target points above $t$. It is exact on the source by construction, and it stays close when the shift
 mostly moves points across confidence levels without changing how errors relate to confidence.
 
-In the benchmark, the model's mean confidence drops less than its accuracy does (it is under-confident on
-the shifted states), which is why the raw confidence alarm catches 20 of 44 degraded deployments and ATC
+In the benchmark, the model's mean confidence drops less than its accuracy does on every degraded state (it is
+over-confident there: confidence stays above the accuracy it actually gets), which is why the raw confidence alarm catches 20 of 44 degraded deployments and ATC
 catches 35.
 
 ## 4. Relation to the domain adaptation bound
